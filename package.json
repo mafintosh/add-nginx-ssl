@@ -1,0 +1,21 @@
+{
+  "name": "add-nginx-ssl",
+  "version": "0.0.0",
+  "description": "Add SSL config to nginx",
+  "main": "index.js",
+  "dependencies": {},
+  "devDependencies": {},
+  "bin": {
+    "add-nginx-ssl": "./index.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mafintosh/add-nginx-ssl.git"
+  },
+  "author": "Mathias Buus (@mafintosh)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mafintosh/add-nginx-ssl/issues"
+  },
+  "homepage": "https://github.com/mafintosh/add-nginx-ssl"
+}
