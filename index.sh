@@ -66,7 +66,7 @@ if [ "$DOMAIN" != "" ]; then
   [ "*.${DOMAIN:2}" == "$DOMAIN" ] && WILCARD_SERVER_NAME="server_name ${DOMAIN:2};"
 fi
 
-cat <<EOF_SSL
+cat <<EOF_SSL > /tmp/nginx.ssl.conf
 server {
   listen 80;
   $SERVER_NAME
@@ -97,7 +97,7 @@ server {
   # openssl dhparam -outform pem -out dhparam2048.pem 2048
   $SSL_DHPARAM
 }
-EOF_SSL > /tmp/nginx.ssl.conf
+EOF_SSL
 
 [ ! -O /etc/nginx/conf.d ] && SUDO_MAYBE=sudo
 $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
