@@ -45,6 +45,8 @@ EOF
   exit 0
 fi
 
+[ ! -d /etc/nginx/conf.d ] && error "/etc/nginx/conf.d does not exist. Is nginx installed?"
+
 if [ "$DHPARAM" != "" ]; then
   check_file "$DHPARAM"
   SSL_DHPARAM="ssl_dhparam $(realpath $DHPARAM);";
