@@ -2,13 +2,14 @@
 
 ALL=false
 HELP=false
+DOMAINS=()
 
 while true; do
   case "$1" in
     --all)             ALL=true; shift ;;
     -a)                ALL=true; shift ;;
-    --domain)          DOMAIN="$2"; shift; shift ;;
-    -d)                DOMAIN="$2"; shift; shift ;;
+    --domain)          DOMAINS+=("$2"); shift; shift ;;
+    -d)                DOMAINS+=("$2"); shift; shift ;;
     --help)            HELP=true; shift ;;
     -h)                HELP=true; shift ;;
     --key)             KEY="$2"; shift; shift ;;
@@ -54,26 +55,30 @@ fi
 
 [ "$KEY" == "" ] && error "--key is required"
 [ "$CERT" == "" ] && error "--cert is required"
-[ "$DOMAIN" == "" ] && ! $ALL && error "--domain or --all is required"
+[ "$DOMAINS" == "" ] && ! $ALL && error "--domain or --all is required"
+$ALL && DOMAINS+=('-')
 
 check_file "$KEY"
 check_file "$CERT"
 
-SERVER_NAME="server_name *;"
+rm -f /tmp/nginx.ssl.conf
 
-if [ "$DOMAIN" != "" ]; then
+for DOMAIN in ${DOMAINS[@]}; do
+  [ "$DOMAIN" == "-" ] && DOMAIN='*'
   SERVER_NAME="server_name $DOMAIN;"
-  [ "*.${DOMAIN:2}" == "$DOMAIN" ] && WILCARD_SERVER_NAME="server_name ${DOMAIN:2};"
-fi
+  [ "*.${DOMAIN:2}" == "$DOMAIN" ] && WILDCARD_SERVER_NAME="server_name ${DOMAIN:2};"
 
-cat <<EOF_SSL > /tmp/nginx.ssl.conf
+  cat <<EOF_SSL >> /tmp/nginx.ssl.conf
 server {
   listen 80;
   $SERVER_NAME
-  $WILCARD_SERVER_NAME
+  $WILDCARD_SERVER_NAME
   return 301 https://\$host\$request_uri;
 }
+EOF_SSL
+done
 
+cat <<EOF_SSL >> /tmp/nginx.ssl.conf
 # default config (server_name _; makes this 'base' config)
 server {
   listen 443 default ssl;
