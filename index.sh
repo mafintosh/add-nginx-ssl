@@ -3,6 +3,16 @@
 ALL=false
 HELP=false
 DOMAINS=()
+# From https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
+MODERN_CIHPERS="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+LEGACY_CIPHERS="ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS"
+UNSAFE_CIPHERS="ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:DES-CBC3-SHA:HIGH:SEED:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!RSAPSK:!aDH:!aECDH:!EDH-DSS-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:!SRP"
+CIPHERS="$MODERN_CIPHERS"
+
+MODERN_TLS="TLSv1.2"
+LEGACY_TLS="TLSv1.2 TLSv1.1 TLSv1"
+UNSAFE_TLS="TLSv1.2 TLSv1.1 TLSv1 SSLv3"
+TLS_VERSIONS="$MODERN_TLS"
 
 while true; do
   case "$1" in
@@ -19,6 +29,12 @@ while true; do
     -c)                CERT="$2"; shift; shift ;;
     --dhparam)         DHPARAM="$2"; shift; shift ;;
     -p)                DHPARAM="$2"; shift; shift ;;
+    --modern-ciphers)  CIPHERS="$MODERN_CIPHERS"; shift ;;
+    --legacy-ciphers)  CIPHERS="$LEGACY_CIPHERS"; shift ;;
+    --unsafe-ciphers)  CIPHERS="$UNSAFE_CIPHERS"; shift ;;
+    --modern-tls)      TLS_VERSIONS="$MODERN_TLS"; shift ;;
+    --legacy-tls)      TLS_VERSIONS="$LEGACY_TLS"; shift ;;
+    --unsafe-tls)      TLS_VERSIONS="$UNSAFE_TLS"; shift ;;
     *)                 break ;;
   esac
 done
@@ -36,11 +52,17 @@ check_file () {
 if $HELP; then
   cat <<EOF_HELP
 Usage: add-nginx-ssl [options]
-  --key,     -k  ssl-private-key.key (required)
-  --cert,    -c  ssl-certificate.crt (required)
-  --dhparam, -p  dhparam.pem
-  --all,     -a  (add ssl to all domains)
-  --domain,  -d  example.com
+  --key,            -k  ssl-private-key.key (required)
+  --cert,           -c  ssl-certificate.crt (required)
+  --dhparam,        -p  dhparam.pem
+  --all,            -a  (add ssl to all domains)
+  --domain,         -d  example.com
+  --modern-ciphers      accept modern ciphers (default)
+  --legacy-ciphers      accept legacy ciphers
+  --unsafe-ciphers      accept all, including some dangerous, ciphers
+  --modern-tls          accept only TLS v1.2 (default)
+  --legacy-tls          accept all TLS versions
+  --unsafe-tls          accept all TLS versions and SSLv3
 
 EOF_HELP
   exit 0
@@ -81,7 +103,7 @@ done
 cat <<EOF_SSL >> /tmp/nginx.ssl.conf
 # default config (server_name _; makes this 'base' config)
 server {
-  listen 443 default ssl;
+  listen 443 default ssl;  
   server_name _;
 
   ssl_certificate_key $(realpath "$KEY");
@@ -89,11 +111,13 @@ server {
 
   # These this next block of settings came directly from the SSLMate recommend nginx configuration
   # Recommended security settings from https://wiki.mozilla.org/Security/Server_Side_TLS
-  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
-  ssl_ciphers 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA';
+  ssl_protocols $TLS_VERSIONS;
+  ssl_ciphers '$CIPHERS';
   ssl_prefer_server_ciphers on;
   ssl_session_timeout 5m;
   ssl_session_cache shared:SSL:5m;
+  ssl_session_tickets off;
+
   # Enable this if you want HSTS (recommended)
   add_header Strict-Transport-Security max-age=15768000;
 
