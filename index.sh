@@ -203,25 +203,27 @@ if $LETSENCRYPT; then
   setup_domains
   $SUDO_MAYBE nginx -s reload
 
-  if [ "$DHPARAM" == "" ]; then
-    DHPARAM="/etc/nginx/conf.d/dhparam2048.pem"
-    [ ! -f "$DHPARAM" ] && $SUDO_MAYBE openssl dhparam -outform pem -out "$DHPARAM" 2048
-  fi
-
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
   $SUDO_MAYBE certbot certonly $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt
 
+  if [ "$DHPARAM" == "" ]; then
+    DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
+    [ ! -f "$DHPARAM" ] && $SUDO_MAYBE openssl dhparam -outform pem -out "$DHPARAM" 2048
+  fi
+
   KEY="$LETSENCRYPT_CERTS/privkey.pem"
   CERT="$LETSENCRYPT_CERTS/fullchain.pem"
-fi
-
-if [ "$DHPARAM" != "" ]; then
-  check_file "$DHPARAM"
   SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
+else
+  if [ "$DHPARAM" != "" ]; then
+    check_file "$DHPARAM"
+    SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
+  fi
+
+  check_file "$KEY"
+  check_file "$CERT"
 fi
 
-check_file "$KEY"
-check_file "$CERT"
 
 setup_domains
 setup_ssl
