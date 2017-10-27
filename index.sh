@@ -106,8 +106,9 @@ server {
   location /.well-known/acme-challenge {
     root /var/www/letsencrypt;
   }
-
-  return 301 https://\$host\$request_uri;
+  location / {
+    return 301 https://\$host\$request_uri;
+  }
 }
 EOF
   done
