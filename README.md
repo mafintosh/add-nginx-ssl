@@ -32,7 +32,7 @@ openssl dhparam -outform pem -out dhparam2048.pem 2048
 If you don't have a certificate but have certbot installed (the command line tool for [Let's Encrypt](https://letsencrypt.org/)), add-nginx-ssl can auto issue the certificates for you.
 
 ``` shell
-# use let's encrypt
+# use let's encrypt to issue and auto renew the certs
 add-nginx-ssl --letsencrypt -d my-domain.com -d my-other-domain.com
 ```
 
