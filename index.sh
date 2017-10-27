@@ -116,6 +116,12 @@ EOF
   $SUDO_MAYBE mv /tmp/nginx.ssl-domains.conf /etc/nginx/conf.d/ssl-domains.conf
 }
 
+setup_dhparam () {
+  if [ ! -f "$DHPARAM" ]; then
+    openssl dhparam -outform pem -out "$DHPARAM" 2048
+  fi
+}
+
 setup_ssl () {
   cat <<EOF > /tmp/nginx.ssl.conf
 # default config (server_name _; makes this 'base' config)
@@ -206,13 +212,11 @@ if $LETSENCRYPT; then
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
   $SUDO_MAYBE certbot certonly $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt
 
-  if [ "$DHPARAM" == "" ]; then
-    DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
-    [ ! -f "$DHPARAM" ] && $SUDO_MAYBE openssl dhparam -outform pem -out "$DHPARAM" 2048
-  fi
-
+  DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
   KEY="$LETSENCRYPT_CERTS/privkey.pem"
   CERT="$LETSENCRYPT_CERTS/fullchain.pem"
+
+  $SUDO_MAYBE setup_dhparam
   SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
 else
   if [ "$DHPARAM" != "" ]; then
