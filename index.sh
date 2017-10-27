@@ -103,7 +103,6 @@ server {
   listen 80;
   $SERVER_NAME
   $WILDCARD_SERVER_NAME
-
   location /.well-known/acme-challenge {
     root /var/www/letsencrypt;
   }
