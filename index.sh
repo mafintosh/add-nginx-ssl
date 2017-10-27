@@ -61,6 +61,34 @@ check_file () {
   error "$1 does not exist"
 }
 
+renew_cert_timer () {
+  cat << EOF > /etc/systemd/system/certbot.service
+[Unit]
+Description=Lets Encrypt renewal
+
+[Service]
+Type=oneshot
+ExecStart=$(which certbot) renew --quiet --agree-tos
+EOF
+
+  cat << EOF > /etc/systemd/system/certbot.timer
+[Unit]
+Description=Twice daily renewal of Lets Encrypt certificates
+
+[Timer]
+OnCalendar=0/12:00:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  systemctl enable certbot.timer
+  systemctl start certbot.timer
+}
+
+
 if $HELP; then
   cat <<EOF
 Usage: add-nginx-ssl [options]
@@ -103,6 +131,7 @@ done
 if $LETSENCRYPT; then
   check_program openssl
   check_program certbot
+  check_program systemctl
 
   FIRST_DOMAIN="${DOMAINS[0]}"
   LETSENCRYPT_CERTS="/etc/letsencrypt/live/$FIRST_DOMAIN"
@@ -127,7 +156,10 @@ EOF
   [ ! -f "$DHPARAM" ] && openssl dhparam -outform pem -out "$DHPARAM" 2048
 
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
-  $SUDO_MAYBE certbot certonly -d $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt --dry-run
+  $SUDO_MAYBE certbot certonly $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt
+
+  KEY="$LETSENCRYPT_CERTS/privkey.pem"
+  CERT="$LETSENCRYPT_CERTS/fullchain.pem"
 fi
 
 if [ "$DHPARAM" != "" ]; then
@@ -199,5 +231,6 @@ EOF
 
 $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
 $SUDO_MAYBE nginx -s reload
+$LETSENCRYPT && $SUDO_MAYBE renew_cert_timer
 
 echo "Wrote nginx SSL config to /etc/nginx/conf.d/ssl.conf"
