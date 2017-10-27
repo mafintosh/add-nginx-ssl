@@ -4,6 +4,8 @@ ALL=false
 HELP=false
 DOMAINS=()
 LETSENCRYPT=false
+[ "$1" == "" ] && HELP=true
+
 # From https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
 MODERN_CIHPERS="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
 LEGACY_CIPHERS="ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS"
@@ -58,7 +60,7 @@ check_file () {
 }
 
 if $HELP; then
-  cat <<EOF_HELP
+  cat <<EOF
 Usage: add-nginx-ssl [options]
   --key,            -k  ssl-private-key.key (required if no --letsencrypt)
   --cert,           -c  ssl-certificate.crt (required if no --letsencrypt)
@@ -73,7 +75,7 @@ Usage: add-nginx-ssl [options]
   --legacy-tls          accept all TLS versions
   --unsafe-tls          accept all TLS versions and SSLv3
 
-EOF_HELP
+EOF
   exit 0
 fi
 
@@ -88,6 +90,14 @@ $ALL && DOMAINS+=('-')
 
 [ ! -O /etc/nginx/conf.d ] && SUDO_MAYBE=sudo
 
+if $ALL && $LETSENCRYPT; then
+  error "cannot both have --letsencrypt and --all"
+fi
+
+for DOMAIN in ${DOMAINS[@]}; do
+  DOMAIN_LIST="$DOMAIN_LIST -d $DOMAIN"
+done
+
 if $LETSENCRYPT; then
   check_program openssl
   check_program certbot
@@ -97,7 +107,7 @@ if $LETSENCRYPT; then
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
 
   if [ ! -f /etc/nginx/conf.d/ssl.conf ] || ! grep '/.well-known/acme-challenge' /etc/nginx/conf.d/ssl.conf >/dev/null 2>/dev/null; then
-    cat <<EOF_LETSENCRYPT > /etc/nginx/conf.d/ssl.conf
+    cat <<EOF > /tmp/nginx.ssl.conf
 server {
   listen 80;
   server_name _;
@@ -106,13 +116,16 @@ server {
     root /var/www/letsencrypt;
   }
 }
-EOF_LETSENCRYPT
-
+EOF
+    $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
     $SUDO_MAYBE nginx -s reload
-
-    DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
-    [ ! -f "$DHPARAM" ] && openssl dhparam -outform pem -out "$DHPARAM" 2048
   fi
+
+  DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
+  [ ! -f "$DHPARAM" ] && openssl dhparam -outform pem -out "$DHPARAM" 2048
+
+  $SUDO_MAYBE mkdir -p /var/www/letsencrypt
+  $SUDO_MAYBE certbot certonly -d $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt --dry-run
 fi
 
 if [ "$DHPARAM" != "" ]; then
@@ -130,17 +143,17 @@ for DOMAIN in ${DOMAINS[@]}; do
   SERVER_NAME="server_name $DOMAIN;"
   [ "*.${DOMAIN:2}" == "$DOMAIN" ] && WILDCARD_SERVER_NAME="server_name ${DOMAIN:2};"
 
-  cat <<EOF_SSL >> /tmp/nginx.ssl.conf
+  cat <<EOF >> /tmp/nginx.ssl.conf
 server {
   listen 80;
   $SERVER_NAME
   $WILDCARD_SERVER_NAME
   return 301 https://\$host\$request_uri;
 }
-EOF_SSL
+EOF
 done
 
-cat <<EOF_SSL >> /tmp/nginx.ssl.conf
+cat <<EOF >> /tmp/nginx.ssl.conf
 # default config (server_name _; makes this 'base' config)
 
 server {
@@ -155,6 +168,10 @@ server {
 server {
   listen 443 default ssl;
   server_name _;
+
+  location /.well-known/acme-challenge {
+    root /var/www/letsencrypt;
+  }
 
   ssl_certificate_key $(realpath -s "$KEY");
   ssl_certificate $(realpath -s "$CERT");
@@ -176,7 +193,7 @@ server {
   # openssl dhparam -outform pem -out dhparam2048.pem 2048
   $SSL_DHPARAM
 }
-EOF_SSL
+EOF
 
 $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
 $SUDO_MAYBE nginx -s reload
