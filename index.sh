@@ -204,7 +204,7 @@ if $LETSENCRYPT; then
   $SUDO_MAYBE nginx -s reload
 
   if [ "$DHPARAM" == "" ]; then
-    DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
+    DHPARAM="/etc/nginx/conf.d/dhparam2048.pem"
     [ ! -f "$DHPARAM" ] && $SUDO_MAYBE openssl dhparam -outform pem -out "$DHPARAM" 2048
   fi
 
