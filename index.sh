@@ -196,6 +196,10 @@ if $LETSENCRYPT; then
   LETSENCRYPT_CERTS="/etc/letsencrypt/live/$FIRST_DOMAIN"
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
 
+  for DOMAIN in ${DOMAINS[@]}; do
+    DOMAIN_LIST="$DOMAIN_LIST -d $DOMAIN"
+  done
+
   setup_domains
   $SUDO_MAYBE nginx -s reload
 
