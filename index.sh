@@ -8,6 +8,11 @@ DOMAINS=()
 LETSENCRYPT=false
 [ "$1" == "" ] && HELP=true
 
+if [ "$UID" != "0" ] && ! $HELP; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
 # From https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
 MODERN_CIPHERS="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
 LEGACY_CIPHERS="ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS"
@@ -46,13 +51,33 @@ while true; do
   esac
 done
 
+if $HELP; then
+  cat <<EOF
+Usage: add-nginx-ssl [options]
+  --key,            -k  ssl-private-key.key (required if no --letsencrypt)
+  --cert,           -c  ssl-certificate.crt (required if no --letsencrypt)
+  --letsencrypt     -l  use letsencrypt to issue and auto renew certs
+  --dhparam,        -p  dhparam.pem
+  --all,            -a  (add ssl to all domains)
+  --domain,         -d  example.com
+  --modern-ciphers      accept modern ciphers (default)
+  --legacy-ciphers      accept legacy ciphers
+  --unsafe-ciphers      accept all, including some dangerous, ciphers
+  --modern-tls          accept only TLS v1.2 (default)
+  --legacy-tls          accept all TLS versions
+  --unsafe-tls          accept all TLS versions and SSLv3
+
+EOF
+  exit 0
+fi
+
 error () {
   echo "$1" >&2
   exit 1
 }
 
 check_program () {
-  [ "$(which $1) 2>/dev/null" != "" ] && return 0
+  [ "$(which $1 2>/dev/null)" != "" ] && return 0
   error "$1 is required"
 }
 
@@ -91,14 +116,14 @@ EOF
 }
 
 setup_domains () {
-  rm -f /tmp/nginx.ssl-domains.conf
+  rm -f /etc/nginx/conf.d/ssl-domains.conf
 
   for DOMAIN in ${DOMAINS[@]}; do
     [ "$DOMAIN" == "-" ] && DOMAIN='*'
     SERVER_NAME="server_name $DOMAIN;"
     [ "*.${DOMAIN:2}" == "$DOMAIN" ] && WILDCARD_SERVER_NAME="server_name ${DOMAIN:2};"
 
-    cat <<EOF >> /tmp/nginx.ssl-domains.conf
+    cat <<EOF >> /etc/nginx/conf.d/ssl-domains.conf
 server {
   listen 80;
   $SERVER_NAME
@@ -112,18 +137,10 @@ server {
 }
 EOF
   done
-
-  $SUDO_MAYBE mv /tmp/nginx.ssl-domains.conf /etc/nginx/conf.d/ssl-domains.conf
-}
-
-setup_dhparam () {
-  if [ ! -f "$DHPARAM" ]; then
-    openssl dhparam -outform pem -out "$DHPARAM" 2048
-  fi
 }
 
 setup_ssl () {
-  cat <<EOF > /tmp/nginx.ssl.conf
+  cat <<EOF > /etc/nginx/conf.d/ssl.conf
 # default config (server_name _; makes this 'base' config)
 server {
   listen 443 default ssl;
@@ -154,29 +171,7 @@ server {
   $SSL_DHPARAM
 }
 EOF
-
-  $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
 }
-
-if $HELP; then
-  cat <<EOF
-Usage: add-nginx-ssl [options]
-  --key,            -k  ssl-private-key.key (required if no --letsencrypt)
-  --cert,           -c  ssl-certificate.crt (required if no --letsencrypt)
-  --letsencrypt     -l  use letsencrypt to issue and auto renew certs
-  --dhparam,        -p  dhparam.pem
-  --all,            -a  (add ssl to all domains)
-  --domain,         -d  example.com
-  --modern-ciphers      accept modern ciphers (default)
-  --legacy-ciphers      accept legacy ciphers
-  --unsafe-ciphers      accept all, including some dangerous, ciphers
-  --modern-tls          accept only TLS v1.2 (default)
-  --legacy-tls          accept all TLS versions
-  --unsafe-tls          accept all TLS versions and SSLv3
-
-EOF
-  exit 0
-fi
 
 check_program nginx
 
@@ -186,8 +181,6 @@ check_program nginx
 [ "$CERT" == "" ] && ! $LETSENCRYPT && error "--cert is required"
 [ "$DOMAINS" == "" ] && ! $ALL && error "--domain or --all is required"
 $ALL && DOMAINS+=('-')
-
-[ ! -O /etc/nginx/conf.d ] && SUDO_MAYBE=sudo
 
 if $ALL && $LETSENCRYPT; then
   error "Cannot both have --letsencrypt and --all"
@@ -200,38 +193,38 @@ if $LETSENCRYPT; then
 
   FIRST_DOMAIN="${DOMAINS[0]}"
   LETSENCRYPT_CERTS="/etc/letsencrypt/live/$FIRST_DOMAIN"
-  $SUDO_MAYBE mkdir -p /var/www/letsencrypt
+  mkdir -p /var/www/letsencrypt
 
   for DOMAIN in ${DOMAINS[@]}; do
     DOMAIN_LIST="$DOMAIN_LIST -d $DOMAIN"
   done
 
   setup_domains
-  $SUDO_MAYBE nginx -s reload
+  nginx -s reload
 
-  $SUDO_MAYBE mkdir -p /var/www/letsencrypt
-  $SUDO_MAYBE certbot certonly $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt
+  mkdir -p /var/www/letsencrypt
+  certbot certonly $DOMAIN_LIST --expand --webroot -n --agree-tos --register-unsafely-without-email --webroot-path /var/www/letsencrypt
 
-  DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
   KEY="$LETSENCRYPT_CERTS/privkey.pem"
   CERT="$LETSENCRYPT_CERTS/fullchain.pem"
 
-  $SUDO_MAYBE setup_dhparam
-  SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
-else
-  if [ "$DHPARAM" != "" ]; then
-    check_file "$DHPARAM"
-    SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
+  if [ "$DHPARAM" == "" ]; then
+    DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
+    [ ! -f "$DHPARAM" ] && openssl dhparam -outform pem -out "$DHPARAM" 2048
   fi
-
-  check_file "$KEY"
-  check_file "$CERT"
 fi
 
+if [ "$DHPARAM" != "" ]; then
+  check_file "$DHPARAM"
+  SSL_DHPARAM="ssl_dhparam $(realpath -s $DHPARAM);";
+fi
+
+check_file "$KEY"
+check_file "$CERT"
 
 setup_domains
 setup_ssl
-$SUDO_MAYBE nginx -s reload
-$LETSENCRYPT && $SUDO_MAYBE renew_cert_timer
+nginx -s reload
+$LETSENCRYPT && renew_cert_timer
 
 echo "Wrote nginx SSL config to /etc/nginx/conf.d/ssl.conf and /etc/nginx/conf.d/ssl-domains.conf"
