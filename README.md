@@ -27,6 +27,15 @@ Protip, to generate the dhparam.pem file you can use the following command
 openssl dhparam -outform pem -out dhparam2048.pem 2048
 ```
 
+# Using Let's Encrypt
+
+If you don't have a certificate but have certbot installed (the command line tool for [Let's Encrypt](https://letsencrypt.org/)), add-nginx-ssl can auto issue the certificates for you.
+
+``` shell
+# use let's encrypt
+add-nginx-ssl --letsencrypt -d my-domain.com -d my-other-domain.com
+```
+
 ## License
 
 MIT
