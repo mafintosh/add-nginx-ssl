@@ -84,7 +84,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-  systemctl enable certbot.timer
+  systemctl enable certbot.timer 2>/dev/null || true
   systemctl start certbot.timer
 
   echo "Started certificate renew timer"
