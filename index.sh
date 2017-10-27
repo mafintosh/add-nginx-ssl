@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 ALL=false
 HELP=false
 DOMAINS=()
