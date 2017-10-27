@@ -142,7 +142,7 @@ if $LETSENCRYPT; then
   if [ ! -f /etc/nginx/conf.d/ssl.conf ] || ! grep '/.well-known/acme-challenge' /etc/nginx/conf.d/ssl.conf >/dev/null 2>/dev/null; then
     cat <<EOF > /tmp/nginx.ssl.conf
 server {
-  listen 80;
+  listen 80 default;
   server_name _;
 
   location /.well-known/acme-challenge {
