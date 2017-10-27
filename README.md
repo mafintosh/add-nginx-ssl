@@ -29,7 +29,7 @@ openssl dhparam -outform pem -out dhparam2048.pem 2048
 
 # Using Let's Encrypt
 
-If you don't have a certificate but have certbot installed (the command line tool for [Let's Encrypt](https://letsencrypt.org/)), add-nginx-ssl can auto issue the certificates for you.
+If you don't have a certificate but have certbot installed (the command line tool for [Let's Encrypt](https://letsencrypt.org/)), add-nginx-ssl can auto issue the certificates for you, and start a auto renewel timer using systemd.
 
 ``` shell
 # use let's encrypt to issue and auto renew the certs
