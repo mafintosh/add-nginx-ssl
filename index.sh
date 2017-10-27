@@ -62,7 +62,7 @@ check_file () {
 }
 
 renew_cert_timer () {
-  cat << EOF > /etc/systemd/system/certbot.service
+  cat <<EOF > /etc/systemd/system/certbot.service
 [Unit]
 Description=Lets Encrypt renewal
 
@@ -71,7 +71,7 @@ Type=oneshot
 ExecStart=$(which certbot) renew --quiet --agree-tos
 EOF
 
-  cat << EOF > /etc/systemd/system/certbot.timer
+  cat <<EOF > /etc/systemd/system/certbot.timer
 [Unit]
 Description=Twice daily renewal of Lets Encrypt certificates
 
@@ -126,10 +126,6 @@ if $ALL && $LETSENCRYPT; then
   error "Cannot both have --letsencrypt and --all"
 fi
 
-for DOMAIN in ${DOMAINS[@]}; do
-  DOMAIN_LIST="$DOMAIN_LIST -d $DOMAIN"
-done
-
 if $LETSENCRYPT; then
   check_program openssl
   check_program certbot
@@ -139,20 +135,25 @@ if $LETSENCRYPT; then
   LETSENCRYPT_CERTS="/etc/letsencrypt/live/$FIRST_DOMAIN"
   $SUDO_MAYBE mkdir -p /var/www/letsencrypt
 
-  if [ ! -f /etc/nginx/conf.d/ssl.conf ] || ! grep '/.well-known/acme-challenge' /etc/nginx/conf.d/ssl.conf >/dev/null 2>/dev/null; then
-    cat <<EOF > /tmp/nginx.ssl.conf
+  rm -f /tmp/nginx.acme-challenge.conf
+
+  for DOMAIN in ${DOMAINS[@]}; do
+    DOMAIN_LIST="$DOMAIN_LIST -d $DOMAIN"
+
+    cat <<EOF >> /tmp/nginx.acme-challenge.conf
 server {
-  listen 80 default;
-  server_name _;
+  listen 80;
+  server_name $DOMAIN;
 
   location /.well-known/acme-challenge {
     root /var/www/letsencrypt;
   }
 }
 EOF
-    $SUDO_MAYBE mv /tmp/nginx.ssl.conf /etc/nginx/conf.d/ssl.conf
-    $SUDO_MAYBE nginx -s reload
-  fi
+  done
+
+  $SUDO_MAYBE mv /tmp/nginx.acme-challenge.conf /etc/nginx/conf.d/acme-challenge.conf
+  $SUDO_MAYBE nginx -s reload
 
   DHPARAM="$LETSENCRYPT_CERTS/dhparam2048.pem"
   [ ! -f "$DHPARAM" ] && openssl dhparam -outform pem -out "$DHPARAM" 2048
