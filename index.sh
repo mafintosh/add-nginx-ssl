@@ -93,7 +93,7 @@ Description=Lets Encrypt renewal
 
 [Service]
 Type=oneshot
-ExecStart=$(which certbot) renew --quiet --agree-tos
+ExecStart=$(which certbot) renew --quiet --agree-tos --deploy-hook "$(which nginx) -s reload"
 EOF
 
   cat <<EOF > /etc/systemd/system/certbot.timer
@@ -109,6 +109,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+  systemctl daemon-reload
   systemctl enable certbot.timer 2>/dev/null || true
   systemctl start certbot.timer
 
